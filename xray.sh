@@ -194,7 +194,7 @@ echo -e "${GB}[ INFO ]${NC} ${YB}Setup Nginx & Xray Conf${NC}"
 echo "UQ3w2q98BItd3DPgyctdoJw4cqQFmY59ppiDQdqMKbw=" > /usr/local/etc/xray/serverpsk
 download_file "https://raw.githubusercontent.com/msi8888/hehe/main/config2026.json" "/usr/local/etc/xray/config.json" || exit 1
 download_file "https://raw.githubusercontent.com/Jesanne87/Version/main/nginx.conf" "/etc/nginx/nginx.conf" || exit 1
-download_file "https://raw.githubusercontent.com/Jesanne87/Version/main/xray2026.conf" "/etc/nginx/conf.d/xray.conf" || exit 1
+download_file "https://raw.githubusercontent.com/Jesanne87/Version/main/xray.conf" "/etc/nginx/conf.d/xray.conf" || exit 1
 systemctl restart nginx
 systemctl restart xray
 echo -e "${GB}[ INFO ]${NC} ${YB}Setup Done${NC}"
