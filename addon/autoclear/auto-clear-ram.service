@@ -1,0 +1,13 @@
+[Unit]
+Description=Auto Clearing RAM
+Documentation=https://JsPhantom.com
+After=syslog.target network-online.target
+
+[Service]
+User=root
+NoNewPrivileges=true
+ExecStart=/usr/bin/auto-clear-ram
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

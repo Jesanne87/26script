@@ -1,0 +1,72 @@
+#!/bin/bash
+
+_APISERVER=127.0.0.1:10000
+_XRAY=/usr/local/bin/xray
+INTERVAL=5
+
+LOGDIR="/user/bwlog"
+COUNTERDIR="/user/bwcounter"
+
+mkdir -p "$LOGDIR" "$COUNTERDIR"
+
+apidata () {
+
+$_XRAY api statsquery --server=$_APISERVER "pattern: user" 2>/dev/null | \
+awk '
+
+/"name"/ {
+
+gsub(/[",]/,"")
+
+split($2,a,">>>")
+
+user=a[2]
+dir=a[4]
+
+getline
+
+gsub(/[",]/,"")
+
+value=$2
+
+printf "%s %s %s\n",user,dir,value
+
+}
+
+'
+
+}
+
+log_user_data() {
+
+local TODAY=$(date +"%Y-%m-%d")
+
+while read USER DIR VALUE; do
+
+COUNTER="$COUNTERDIR/${USER}-${DIR}.txt"
+LOG="$LOGDIR/${USER}.log"
+
+OLD=0
+[[ -f "$COUNTER" ]] && OLD=$(cat "$COUNTER")
+
+DELTA=$((VALUE-OLD))
+[[ $DELTA -lt 0 ]] && DELTA=$VALUE
+
+echo "$VALUE" > "$COUNTER"
+
+echo "$TODAY $DIR $DELTA" >> "$LOG"
+
+done
+
+}
+
+while true
+do
+
+DATA=$(apidata)
+
+echo "$DATA" | log_user_data
+
+sleep $INTERVAL
+
+done
