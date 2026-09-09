@@ -218,53 +218,53 @@ netfilter-persistent reload
 clear
 cd /usr/bin
 echo -e "${GB}[ INFO ]${NC} ${YB}Downloading Main Menu${NC}"
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/menu/menu.sh" "menu" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/menu/vmess.sh" "vmess" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/menu/vless.sh" "vless" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/menu/traffic.sh" "traffic" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/menu/warp-menu.sh" "warp-menu" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/menu/tweak-menu.sh" "tweak-menu" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/menu/lock_unlock_id.sh" "lock_unlock_id" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/menu/menu.sh" "menu" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/menu/vmess.sh" "vmess" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/menu/vless.sh" "vless" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/menu/traffic.sh" "traffic" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/menu/warp-menu.sh" "warp-menu" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/menu/tweak-menu.sh" "tweak-menu" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/menu/lock_unlock_id.sh" "lock_unlock_id" || exit 1
 sleep 0.5
 echo -e "${GB}[ INFO ]${NC} ${YB}Downloading Menu Vmess${NC}"
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/vmess/add-vmess.sh" "add-vmess" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/vmess/del-vmess.sh" "del-vmess" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/vmess/extend-vmess.sh" "extend-vmess" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/vmess/trialvmess.sh" "trialvmess" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/vmess/cek-vmess.sh" "cek-vmess" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/vmess/add-vmess.sh" "add-vmess" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/vmess/del-vmess.sh" "del-vmess" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/vmess/extend-vmess.sh" "extend-vmess" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/vmess/trialvmess.sh" "trialvmess" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/vmess/cek-vmess.sh" "cek-vmess" || exit 1
 sleep 0.5
 echo -e "${GB}[ INFO ]${NC} ${YB}Downloading Menu Vless${NC}"
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/vless/add-vless.sh" "add-vless" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/vless/del-vless.sh" "del-vless" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/vless/extend-vless.sh" "extend-vless" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/vless/trialvless.sh" "trialvless" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/vless/cek-vless.sh" "cek-vless" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/vless/add-vless.sh" "add-vless" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/vless/del-vless.sh" "del-vless" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/vless/extend-vless.sh" "extend-vless" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/vless/trialvless.sh" "trialvless" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/vless/cek-vless.sh" "cek-vless" || exit 1
 sleep 0.5
 sleep 0.5
 echo -e "${GB}[ INFO ]${NC} ${YB}Downloading Menu Log${NC}"
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/log/log-vmess.sh" "log-vmess" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/log/log-vless.sh" "log-vless" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/log/log-vmess.sh" "log-vmess" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/log/log-vless.sh" "log-vless" || exit 1
 sleep 0.5
 echo -e "${GB}[ INFO ]${NC} ${YB}Downloading Other Menu${NC}"
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/other/xp.sh" "xp" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/other/dns.sh" "dns" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/other/certxray.sh" "certxray" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/other/xray_switcher.sh" "xray_switcher" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/other/about.sh" "about" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/other/clear-log.sh" "clear-log" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/other/changer.sh" "changer" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/other/nf.sh" "nf" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/other/telegram-backup.sh" "telegram-backup" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/other/dnsstatus.sh" "dnsstatus" || exit 1
-download_file "https://raw.githubusercontent.com/Jesanne87/combo/main/addon/autoclear/autoclear-menu.sh" "autoclear-menu" || exit 1
-download_file "https://raw.githubusercontent.com/Jesanne87/combo/main/addon/autoclear/auto-clear-ram.sh" "auto-clear-ram" || exit 1
-download_file "https://raw.githubusercontent.com/Jesanne87/combo/main/addon/autoclear/autoclear.conf" "/home/autoclear.conf" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/other/xp.sh" "xp" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/other/dns.sh" "dns" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/other/certxray.sh" "certxray" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/other/xray_switcher.sh" "xray_switcher" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/other/about.sh" "about" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/other/clear-log.sh" "clear-log" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/other/changer.sh" "changer" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/other/nf.sh" "nf" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/other/telegram-backup.sh" "telegram-backup" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/other/dnsstatus.sh" "dnsstatus" || exit 1
+download_file "https://raw.githubusercontent.com/Jesanne87/26script/main/addon/autoclear/autoclear-menu.sh" "autoclear-menu" || exit 1
+download_file "https://raw.githubusercontent.com/Jesanne87/26script/main/addon/autoclear/auto-clear-ram.sh" "auto-clear-ram" || exit 1
+download_file "https://raw.githubusercontent.com/Jesanne87/26script/main/addon/autoclear/autoclear.conf" "/home/autoclear.conf" || exit 1
 chmod +x /home/autoclear.conf
-download_file "https://raw.githubusercontent.com/Jesanne87/combo/main/bot/bot_menu.sh" "bot_menu" || exit 1
-download_file "https://raw.githubusercontent.com/${GitUser}/combo/main/other/auto_logger.sh" "/usr/local/bin/auto_logger" || exit 1
+download_file "https://raw.githubusercontent.com/Jesanne87/26script/main/bot/bot_menu.sh" "bot_menu" || exit 1
+download_file "https://raw.githubusercontent.com/${GitUser}/26script/main/other/auto_logger.sh" "/usr/local/bin/auto_logger" || exit 1
 echo -e "${GB}[ INFO ]${NC} ${YB}Download All Menu Done${NC}"
-download_file "https://raw.githubusercontent.com/Jesanne87/combo/main/addon/autoclear/auto-clear-ram.service" "/etc/systemd/system/auto-clear-ram.service" || exit 1
-download_file "https://raw.githubusercontent.com/Jesanne87/combo/main/other/auto_logger.service" "/etc/systemd/system/auto_logger.service" || exit 1
+download_file "https://raw.githubusercontent.com/Jesanne87/26script/main/addon/autoclear/auto-clear-ram.service" "/etc/systemd/system/auto-clear-ram.service" || exit 1
+download_file "https://raw.githubusercontent.com/Jesanne87/26script/main/other/auto_logger.service" "/etc/systemd/system/auto_logger.service" || exit 1
 systemctl daemon-reload
 systemctl enable auto-clear-ram
 systemctl start auto-clear-ram
@@ -319,7 +319,7 @@ clear
 menu
 END
 # Version
-serverV=$( curl -sS https://raw.githubusercontent.com/Jesanne87/combo/main/version_check)
+serverV=$( curl -sS https://raw.githubusercontent.com/Jesanne87/26script/main/version_check)
 echo "$serverV" > /home/ver
 # Update your DNS rental/controld expired date after install
 echo "500828" > /home/exp
