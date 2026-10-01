@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import re,json,time,subprocess,base64
 from pathlib import Path
-CFG=Path('/usr/local/etc/xray/config.json'); ACCESS=Path('/var/log/xray/access.log'); BASE=Path('/etc/jsphantom/account-control'); POL=BASE/'policies'; STATE=BASE/'state.json'; LOG=Path('/var/log/jsphantom-account-control.log'); XRAY='/usr/local/bin/xray'; API='127.0.0.1:10000'; TAGS=['vless-ws','vless-xhttp']; WINDOW=300
+CFG=Path('/usr/local/etc/xray/config.json'); ACCESS=Path('/var/log/xray/access.log'); BASE=Path('/etc/jsphantom/account-control'); POL=BASE/'policies'; STATE=BASE/'state.json'; SETTINGS=BASE/'settings.json'; LOG=Path('/var/log/jsphantom-account-control.log'); XRAY='/usr/local/bin/xray'; API='127.0.0.1:10000'; TAGS=['vless-ws','vless-xhttp']
 BASE.mkdir(parents=True,exist_ok=True); POL.mkdir(parents=True,exist_ok=True)
 def load(p,d):
  try:return json.loads(p.read_text())
@@ -43,7 +43,7 @@ def stats():
     except:pass
    name=None
  return out
-def ips(users):
+def ips(users,window):
  o={u:set() for u in users};now=time.time()
  if not ACCESS.exists():return o
  try:lines=subprocess.check_output(['tail','-n','30000',str(ACCESS)],text=True,errors='ignore').splitlines()
@@ -55,26 +55,28 @@ def ips(users):
   if dm:
    try:
     ts=time.mktime(tuple(map(int,dm.groups()))+(0,0,-1))
-    if now-ts>WINDOW:continue
+    if now-ts>window:continue
    except:pass
   im=re.search(r'from\s+(?:tcp:)?(\[[0-9a-fA-F:]+\]|[0-9.]+):\d+',l)
   if im:o[em.group(1)].add(im.group(1).strip('[]'))
  return o
 def main():
+ cfg=load(SETTINGS,{'lock_duration_seconds':600,'ip_window_seconds':300}); lockdur=max(60,int(cfg.get('lock_duration_seconds',600))); window=max(60,int(cfg.get('ip_window_seconds',300)))
  ps={}
  for f in POL.glob('*.json'):
   p=load(f,{})
   if p.get('protocol')=='vless':ps[p.get('user',f.stem)]=p
- st=load(STATE,{});cur=stats();ip=ips(ps)
+ st=load(STATE,{});cur=stats();ip=ips(ps,window);now=int(time.time())
  for u,p in ps.items():
   x=st.setdefault(u,{'used_bytes':0,'last_counter':0,'locked':False,'reason':''});c=cur.get(u,0);old=int(x.get('last_counter',0));d=c-old if c>=old else c
   if d>0:x['used_bytes']=int(x.get('used_bytes',0))+d
-  x['last_counter']=c;x['ip_count']=len(ip[u]);x['ips']=sorted(ip[u]);x['last_check']=int(time.time())
-  q=int(p.get('quota_bytes',0));lim=int(p.get('ip_limit',0));reason='QUOTA_EXCEEDED' if q and x['used_bytes']>=q else ('IP_LIMIT' if lim and x['ip_count']>lim else '')
+  x['last_counter']=c;x['ip_count']=len(ip[u]);x['ips']=sorted(ip[u]);x['last_check']=now
+  q=int(p.get('quota_bytes',0));lim=int(p.get('ip_limit',0)); quota_hit=bool(q and x['used_bytes']>=q); ip_hit=bool(lim and x['ip_count']>lim)
+  reason='QUOTA_EXCEEDED' if quota_hit else ('IP_LIMIT' if ip_hit else '')
   if p.get('auto_lock',True) and reason and not x.get('locked'):
-   if all(alter(t,u,'',False) for t in TAGS):x.update(locked=True,reason=reason,locked_at=int(time.time()));log('LOCK '+u+': '+reason)
-  elif x.get('locked') and x.get('reason')=='IP_LIMIT' and (not lim or x['ip_count']<=lim):
+   if all(alter(t,u,'',False) for t in TAGS):x.update(locked=True,reason=reason,locked_at=now,unlock_at=(now+lockdur if reason=='IP_LIMIT' else 0));log('LOCK '+u+': '+reason)
+  elif x.get('locked') and x.get('reason')=='IP_LIMIT' and now>=int(x.get('unlock_at') or (int(x.get('locked_at',now))+lockdur)):
    uid=uuid(u)
-   if uid and all(alter(t,u,uid,True) for t in TAGS):x.update(locked=False,reason='',locked_at=0);log('UNLOCK '+u)
+   if uid and all(alter(t,u,uid,True) for t in TAGS):x.update(locked=False,reason='',locked_at=0,unlock_at=0);log('AUTO-UNLOCK '+u)
  save(STATE,st)
 if __name__=='__main__':main()
