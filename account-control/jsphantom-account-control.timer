@@ -1,0 +1,9 @@
+[Unit]
+Description=JsPhantom Account Control V1 every minute
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=60
+AccuracySec=10
+Unit=jsphantom-account-control.service
+[Install]
+WantedBy=timers.target

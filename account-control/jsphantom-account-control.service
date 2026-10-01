@@ -1,0 +1,6 @@
+[Unit]
+Description=JsPhantom Account Control V1
+After=xray.service network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/jsphantom-account-control
