@@ -43,40 +43,54 @@ def stats():
     except:pass
    name=None
  return out
-def ips(users,window):
- o={u:set() for u in users};now=time.time()
+def scan_ips(users):
+ o={u:set() for u in users}
  if not ACCESS.exists():return o
  try:lines=subprocess.check_output(['tail','-n','30000',str(ACCESS)],text=True,errors='ignore').splitlines()
  except:return o
  for l in lines:
   em=re.search(r'email:\s*([^\s]+)',l)
   if not em or em.group(1) not in o:continue
-  dm=re.search(r'(\d{4})[/-](\d{2})[/-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})',l)
-  if dm:
-   try:
-    ts=time.mktime(tuple(map(int,dm.groups()))+(0,0,-1))
-    if now-ts>window:continue
-   except:pass
   im=re.search(r'from\s+(?:tcp:)?(\[[0-9a-fA-F:]+\]|[0-9.]+):\d+',l)
   if im:o[em.group(1)].add(im.group(1).strip('[]'))
  return o
 def main():
- cfg=load(SETTINGS,{'lock_duration_seconds':600,'ip_window_seconds':300}); lockdur=max(60,int(cfg.get('lock_duration_seconds',600))); window=max(60,int(cfg.get('ip_window_seconds',300)))
+ cfg=load(SETTINGS,{'lock_duration_seconds':600,'ip_window_seconds':90,'violation_confirm_checks':2})
+ lockdur=max(60,int(cfg.get('lock_duration_seconds',600)))
+ window=max(30,int(cfg.get('ip_window_seconds',90)))
+ confirm=max(1,int(cfg.get('violation_confirm_checks',2)))
  ps={}
  for f in POL.glob('*.json'):
   p=load(f,{})
   if p.get('protocol')=='vless':ps[p.get('user',f.stem)]=p
- st=load(STATE,{});cur=stats();ip=ips(ps,window);now=int(time.time())
+ st=load(STATE,{})
+ cur=stats()
+ seen=scan_ips(ps)
+ now=int(time.time())
  for u,p in ps.items():
-  x=st.setdefault(u,{'used_bytes':0,'last_counter':0,'locked':False,'reason':''});c=cur.get(u,0);old=int(x.get('last_counter',0));d=c-old if c>=old else c
+  x=st.setdefault(u,{'used_bytes':0,'last_counter':0,'locked':False,'reason':'','ip_seen':{},'ip_violation_checks':0})
+  c=cur.get(u,0);oldc=int(x.get('last_counter',0));d=c-oldc if c>=oldc else c
   if d>0:x['used_bytes']=int(x.get('used_bytes',0))+d
-  x['last_counter']=c;x['ip_count']=len(ip[u]);x['ips']=sorted(ip[u]);x['last_check']=now
-  q=int(p.get('quota_bytes',0));lim=int(p.get('ip_limit',0)); quota_hit=bool(q and x['used_bytes']>=q); ip_hit=bool(lim and x['ip_count']>lim)
-  reason='QUOTA_EXCEEDED' if quota_hit else ('IP_LIMIT' if ip_hit else '')
+  x['last_counter']=c
+  hist=x.setdefault('ip_seen',{})
+  for a in seen.get(u,set()):hist[a]=now
+  hist={a:int(t) for a,t in hist.items() if now-int(t)<=window}
+  x['ip_seen']=hist;x['ip_count']=len(hist);x['ips']=sorted(hist);x['last_check']=now
+  q=int(p.get('quota_bytes',0));lim=int(p.get('ip_limit',0))
+  quota_hit=bool(q and x['used_bytes']>=q)
+  ip_hit=bool(lim and x['ip_count']>lim)
+  if ip_hit:x['ip_violation_checks']=int(x.get('ip_violation_checks',0))+1
+  else:x['ip_violation_checks']=0
+  confirmed_ip=ip_hit and x['ip_violation_checks']>=confirm
+  reason='QUOTA_EXCEEDED' if quota_hit else ('IP_LIMIT' if confirmed_ip else '')
   if p.get('auto_lock',True) and reason and not x.get('locked'):
-   if all(alter(t,u,'',False) for t in TAGS):x.update(locked=True,reason=reason,locked_at=now,unlock_at=(now+lockdur if reason=='IP_LIMIT' else 0));log('LOCK '+u+': '+reason)
+   if all(alter(t,u,'',False) for t in TAGS):
+    x.update(locked=True,reason=reason,locked_at=now,unlock_at=(now+lockdur if reason=='IP_LIMIT' else 0))
+    log('LOCK '+u+': '+reason+' ips='+','.join(x.get('ips',[])))
   elif x.get('locked') and x.get('reason')=='IP_LIMIT' and now>=int(x.get('unlock_at') or (int(x.get('locked_at',now))+lockdur)):
    uid=uuid(u)
-   if uid and all(alter(t,u,uid,True) for t in TAGS):x.update(locked=False,reason='',locked_at=0,unlock_at=0);log('AUTO-UNLOCK '+u)
+   if uid and all(alter(t,u,uid,True) for t in TAGS):
+    x.update(locked=False,reason='',locked_at=0,unlock_at=0,ip_violation_checks=0)
+    log('AUTO-UNLOCK '+u)
  save(STATE,st)
 if __name__=='__main__':main()
