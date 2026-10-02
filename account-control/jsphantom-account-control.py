@@ -43,8 +43,9 @@ def stats():
     except:pass
    name=None
  return out
-def scan_ips(users):
- o={u:set() for u in users}
+def scan_ips(users,window,now):
+ # Keep the newest REAL access-log timestamp for each user/IP.
+ o={u:{} for u in users}
  if not ACCESS.exists():return o
  try:lines=subprocess.check_output(['tail','-n','30000',str(ACCESS)],text=True,errors='ignore').splitlines()
  except:return o
@@ -52,7 +53,16 @@ def scan_ips(users):
   em=re.search(r'email:\s*([^\s]+)',l)
   if not em or em.group(1) not in o:continue
   im=re.search(r'from\s+(?:tcp:)?(\[[0-9a-fA-F:]+\]|[0-9.]+):\d+',l)
-  if im:o[em.group(1)].add(im.group(1).strip('[]'))
+  if not im:continue
+  tm=re.match(r'^(\d{4})[-/](\d{2})[-/](\d{2})[ T](\d{2}):(\d{2}):(\d{2})',l)
+  if not tm:continue
+  try:
+   y,mo,d,h,mi,se=map(int,tm.groups())
+   ts=int(time.mktime((y,mo,d,h,mi,se,0,0,-1)))
+  except:continue
+  if ts>now+300 or now-ts>window:continue
+  ip=im.group(1).strip('[]');u=em.group(1)
+  if ts>int(o[u].get(ip,0)):o[u][ip]=ts
  return o
 def sync_deleted_users(st):
  try: txt=CFG.read_text(errors='ignore')
@@ -83,15 +93,15 @@ def main():
   p=load(f,{})
   if p.get('protocol')=='vless':ps[p.get('user',f.stem)]=p
  cur=stats()
- seen=scan_ips(ps)
  now=int(time.time())
+ seen=scan_ips(ps,window,now)
  for u,p in ps.items():
   x=st.setdefault(u,{'used_bytes':0,'last_counter':0,'locked':False,'reason':'','ip_seen':{},'ip_violation_checks':0})
   c=cur.get(u,0);oldc=int(x.get('last_counter',0));d=c-oldc if c>=oldc else c
   if d>0:x['used_bytes']=int(x.get('used_bytes',0))+d
   x['last_counter']=c
   hist=x.setdefault('ip_seen',{})
-  for a in seen.get(u,set()):hist[a]=now
+  for a,t in seen.get(u,{}).items():hist[a]=max(int(hist.get(a,0)),int(t))
   hist={a:int(t) for a,t in hist.items() if now-int(t)<=window}
   x['ip_seen']=hist;x['ip_count']=len(hist);x['ips']=sorted(hist);x['last_check']=now
   q=int(p.get('quota_bytes',0));lim=int(p.get('ip_limit',0))

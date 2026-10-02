@@ -1,5 +1,5 @@
 [Unit]
-Description=JsPhantom Account Control V1 every minute
+Description=JsPhantom Account Control V1.3.3 Timer
 [Timer]
 OnBootSec=60
 OnUnitActiveSec=60
