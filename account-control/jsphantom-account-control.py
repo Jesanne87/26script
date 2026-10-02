@@ -54,16 +54,34 @@ def scan_ips(users):
   im=re.search(r'from\s+(?:tcp:)?(\[[0-9a-fA-F:]+\]|[0-9.]+):\d+',l)
   if im:o[em.group(1)].add(im.group(1).strip('[]'))
  return o
+def sync_deleted_users(st):
+ try: txt=CFG.read_text(errors='ignore')
+ except: return st
+ live=set()
+ for line in txt.splitlines():
+  m=re.match(r'^#=\s+(\S+)(?:\s|$)',line)
+  if m: live.add(m.group(1))
+ removed=[]
+ for f in list(POL.glob('*.json')):
+  p=load(f,{});u=p.get('user',f.stem)
+  if p.get('protocol')=='vless' and u not in live:
+   try:f.unlink()
+   except:pass
+   st.pop(u,None);removed.append(u)
+ if removed:log('AUTO-SYNC removed deleted VLESS: '+','.join(sorted(removed)))
+ return st
+
 def main():
  cfg=load(SETTINGS,{'lock_duration_seconds':600,'ip_window_seconds':90,'violation_confirm_checks':2})
  lockdur=max(60,int(cfg.get('lock_duration_seconds',600)))
  window=max(30,int(cfg.get('ip_window_seconds',90)))
  confirm=max(1,int(cfg.get('violation_confirm_checks',2)))
+ st=load(STATE,{})
+ st=sync_deleted_users(st)
  ps={}
  for f in POL.glob('*.json'):
   p=load(f,{})
   if p.get('protocol')=='vless':ps[p.get('user',f.stem)]=p
- st=load(STATE,{})
  cur=stats()
  seen=scan_ips(ps)
  now=int(time.time())

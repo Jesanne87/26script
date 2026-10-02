@@ -1,5 +1,5 @@
 [Unit]
-Description=JsPhantom Account Control V1.3
+Description=JsPhantom Account Control V1.3.1
 After=xray.service network-online.target
 [Service]
 Type=oneshot
