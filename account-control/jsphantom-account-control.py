@@ -44,7 +44,8 @@ def stats():
    name=None
  return out
 def scan_ips(users,window,now):
- # Keep the newest REAL access-log timestamp for each user/IP.
+ # Build per-user/IP activity inside the recent window.
+ # Each IP keeps first timestamp, last timestamp and hit count.
  o={u:{} for u in users}
  if not ACCESS.exists():return o
  try:lines=subprocess.check_output(['tail','-n','30000',str(ACCESS)],text=True,errors='ignore').splitlines()
@@ -62,7 +63,10 @@ def scan_ips(users,window,now):
   except:continue
   if ts>now+300 or now-ts>window:continue
   ip=im.group(1).strip('[]');u=em.group(1)
-  if ts>int(o[u].get(ip,0)):o[u][ip]=ts
+  z=o[u].setdefault(ip,{'first':ts,'last':ts,'hits':0})
+  z['first']=min(int(z.get('first',ts)),ts)
+  z['last']=max(int(z.get('last',ts)),ts)
+  z['hits']=int(z.get('hits',0))+1
  return o
 def sync_deleted_users(st):
  try: txt=CFG.read_text(errors='ignore')
@@ -82,10 +86,12 @@ def sync_deleted_users(st):
  return st
 
 def main():
- cfg=load(SETTINGS,{'lock_duration_seconds':600,'ip_window_seconds':90,'violation_confirm_checks':2})
+ cfg=load(SETTINGS,{'lock_duration_seconds':600,'ip_window_seconds':90,'violation_confirm_checks':3,'ip_min_hits':2,'new_ip_grace_seconds':30})
  lockdur=max(60,int(cfg.get('lock_duration_seconds',600)))
  window=max(30,int(cfg.get('ip_window_seconds',90)))
- confirm=max(1,int(cfg.get('violation_confirm_checks',2)))
+ confirm=max(1,int(cfg.get('violation_confirm_checks',3)))
+ min_hits=max(1,int(cfg.get('ip_min_hits',2)))
+ grace=max(0,int(cfg.get('new_ip_grace_seconds',30)))
  st=load(STATE,{})
  st=sync_deleted_users(st)
  ps={}
@@ -100,21 +106,37 @@ def main():
   c=cur.get(u,0);oldc=int(x.get('last_counter',0));d=c-oldc if c>=oldc else c
   if d>0:x['used_bytes']=int(x.get('used_bytes',0))+d
   x['last_counter']=c
-  hist=x.setdefault('ip_seen',{})
-  for a,t in seen.get(u,{}).items():hist[a]=max(int(hist.get(a,0)),int(t))
-  hist={a:int(t) for a,t in hist.items() if now-int(t)<=window}
-  x['ip_seen']=hist;x['ip_count']=len(hist);x['ips']=sorted(hist);x['last_check']=now
+  # False-lock protection: an IP is counted only after it has enough
+  # access hits AND has survived the new-IP grace period. Rotating telco
+  # gateway IPs that flash briefly in the log therefore do not count.
+  first_seen=x.setdefault('ip_first_seen',{})
+  activity=seen.get(u,{})
+  for a,z in activity.items():
+   if a not in first_seen:first_seen[a]=int(z.get('first',now))
+  first_seen={a:int(t) for a,t in first_seen.items() if a in activity or now-int(t)<=window}
+  x['ip_first_seen']=first_seen
+  qualified={}
+  details={}
+  for a,z in activity.items():
+   hits=int(z.get('hits',0));last=int(z.get('last',0));first=int(first_seen.get(a,z.get('first',now)))
+   age=max(0,now-first);last_age=max(0,now-last)
+   ok=(hits>=min_hits and age>=grace)
+   details[a]={'hits':hits,'age':age,'last_age':last_age,'qualified':ok}
+   if ok:qualified[a]=last
+  x['ip_seen']=qualified;x['ip_count']=len(qualified);x['ips']=sorted(qualified);x['ip_activity']=details;x['last_check']=now
   q=int(p.get('quota_bytes',0));lim=int(p.get('ip_limit',0))
   quota_hit=bool(q and x['used_bytes']>=q)
   ip_hit=bool(lim and x['ip_count']>lim)
-  if ip_hit:x['ip_violation_checks']=int(x.get('ip_violation_checks',0))+1
+  if ip_hit:
+   x['ip_violation_checks']=int(x.get('ip_violation_checks',0))+1
+   log('IP-CHECK '+u+': qualified='+','.join(x.get('ips',[]))+' count='+str(x['ip_count'])+'/'+str(lim)+' confirm='+str(x['ip_violation_checks'])+'/'+str(confirm))
   else:x['ip_violation_checks']=0
   confirmed_ip=ip_hit and x['ip_violation_checks']>=confirm
   reason='QUOTA_EXCEEDED' if quota_hit else ('IP_LIMIT' if confirmed_ip else '')
   if p.get('auto_lock',True) and reason and not x.get('locked'):
    if all(alter(t,u,'',False) for t in TAGS):
     x.update(locked=True,reason=reason,locked_at=now,unlock_at=(now+lockdur if reason=='IP_LIMIT' else 0))
-    log('LOCK '+u+': '+reason+' ips='+','.join(x.get('ips',[])))
+    log('LOCK '+u+': '+reason+' ips='+','.join(x.get('ips',[]))+' checks='+str(x.get('ip_violation_checks',0)))
   elif x.get('locked') and x.get('reason')=='IP_LIMIT' and now>=int(x.get('unlock_at') or (int(x.get('locked_at',now))+lockdur)):
    uid=uuid(u)
    if uid and all(alter(t,u,uid,True) for t in TAGS):
