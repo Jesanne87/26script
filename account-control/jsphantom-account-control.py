@@ -29,6 +29,26 @@ def alter(tag,u,uid,add):
  else: op=fld(1,u.encode());typ='xray.app.proxyman.command.RemoveUserOperation'
  req={'tag':tag,'operation':{'type':typ,'value':base64.b64encode(op).decode()}}
  return subprocess.run([gr,'-plaintext','-max-time','8','-d',json.dumps(req),API,'xray.app.proxyman.command.HandlerService/AlterInbound'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
+def restore_user(u,uid):
+ # Idempotent unlock: clear a stale/partial API entry first, then add it back.
+ # A missing/non-applicable tag is tolerated; at least one successful inbound
+ # is enough to restore service. No Xray restart/reload is used.
+ ok=[];bad=[]
+ for tag in TAGS:
+  alter(tag,u,'',False)  # best effort; also fixes partial/manual unlock states
+  if alter(tag,u,uid,True): ok.append(tag)
+  else: bad.append(tag)
+ if ok:
+  log('RESTORE '+u+': added='+','.join(ok)+((' skipped/failed='+','.join(bad)) if bad else '')+' xray_restart=NO')
+  return True
+ log('RESTORE-FAILED '+u+': tags='+','.join(bad))
+ return False
+
+def clear_ip_state(x):
+ x['ip_violation_checks']=0
+ x['ip_seen']={};x['ips']=[];x['ip_count']=0
+ x['ip_activity']={};x['ip_first_seen']={}
+
 def stats():
  try:s=subprocess.check_output([XRAY,'api','statsquery','--server='+API,''],stderr=subprocess.DEVNULL,text=True,timeout=12)
  except:return {}
@@ -139,8 +159,9 @@ def main():
     log('LOCK '+u+': '+reason+' ips='+','.join(x.get('ips',[]))+' checks='+str(x.get('ip_violation_checks',0)))
   elif x.get('locked') and x.get('reason')=='IP_LIMIT' and now>=int(x.get('unlock_at') or (int(x.get('locked_at',now))+lockdur)):
    uid=uuid(u)
-   if uid and all(alter(t,u,uid,True) for t in TAGS):
-    x.update(locked=False,reason='',locked_at=0,unlock_at=0,ip_violation_checks=0)
-    log('AUTO-UNLOCK '+u)
+   if uid and restore_user(u,uid):
+    x.update(locked=False,reason='',locked_at=0,unlock_at=0)
+    clear_ip_state(x)
+    log('AUTO-UNLOCK '+u+' xray_restart=NO')
  save(STATE,st)
 if __name__=='__main__':main()
