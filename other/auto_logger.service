@@ -1,11 +1,11 @@
 [Unit]
-Description=Xray Bandwidth Logger
+Description=JsPhantom Account Control Traffic Compatibility
 After=network.target
 
 [Service]
+Type=oneshot
 ExecStart=/usr/local/bin/auto_logger
-Restart=always
-RestartSec=5
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
