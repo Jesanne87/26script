@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# JsPhantom Account Control V1.3.6 - verified native runtime API
+# JsPhantom Account Control V1.3.7 - verified native runtime API
 import re,json,time,subprocess,copy,tempfile,os,sys,fcntl
 from pathlib import Path
 CFG=Path('/usr/local/etc/xray/config.json'); ACCESS=Path('/var/log/xray/access.log'); BASE=Path('/etc/jsphantom/account-control'); POL=BASE/'policies'; STATE=BASE/'state.json'; SETTINGS=BASE/'settings.json'; LOG=Path('/var/log/jsphantom-account-control.log'); XRAY='/usr/local/bin/xray'; API='127.0.0.1:10000'; TAGS=['vless-ws','vless-xhttp']
@@ -64,11 +64,32 @@ def alter(tag,u,uid,add):
  except Exception as e:
   log('API-FAILED '+('ADD ' if add else 'REMOVE ')+tag+'/'+u+': '+str(e))
   return False
+def configured_user_tags(u):
+ # Old restored accounts may belong to only one transport. Validate the
+ # complete selection before changing runtime; duplicates are real errors.
+ d=json.loads(re.sub(r'(?m)^\s*#.*$','',CFG.read_text()))
+ selected=[]
+ for tag in TAGS:
+  inbounds=[i for i in d.get('inbounds',[]) if i.get('tag')==tag]
+  if len(inbounds)>1:raise RuntimeError('Duplicate inbound: '+tag)
+  if not inbounds:continue
+  i=inbounds[0]
+  if i.get('protocol')!='vless':raise RuntimeError('Not a VLESS inbound: '+tag)
+  clients=[c for c in i.get('settings',{}).get('clients',[]) if c.get('email')==u]
+  if len(clients)>1:raise RuntimeError('Duplicate client: '+tag+'/'+u)
+  if clients:selected.append(tag)
+ if not selected:raise RuntimeError('User absent from configured VLESS inbounds: '+u)
+ return selected
+
 def set_runtime(u,add):
- results=[alter(t,u,'',add) for t in TAGS]  # attempt BOTH; no all() short circuit
+ try:tags=configured_user_tags(u) if add else TAGS
+ except Exception as e:
+  log('RESTORE-INCOMPLETE '+u+': '+str(e)+' xray_restart=NO')
+  return False
+ results=[alter(t,u,'',add) for t in tags]  # no all() short circuit
  ok=all(results)
  log(('RESTORE' if add else 'REMOVE')+(' ' if ok else '-INCOMPLETE ')+u+
-     ': '+','.join(t+'='+('OK' if r else 'FAILED') for t,r in zip(TAGS,results))+' xray_restart=NO')
+     ': '+','.join(t+'='+('OK' if r else 'FAILED') for t,r in zip(tags,results))+' xray_restart=NO')
  return ok
 def restore_user(u,uid=None):
  return set_runtime(u,True)
@@ -89,12 +110,12 @@ def unlock_account(u):
   x.pop('runtime_pending',None);x.pop('runtime_error',None)
   clear_ip_state(x)
   save(STATE,st)
-  log('MANUAL-UNLOCK '+u+' verified=WS+XHTTP xray_restart=NO')
-  print('Unlocked: '+u+'; WS + XHTTP runtime verified. No Xray restart.')
+  log('MANUAL-UNLOCK '+u+' verified=configured-inbounds xray_restart=NO')
+  print('Unlocked: '+u+'; configured inbound runtime verified. No Xray restart.')
   return 0
- x['runtime_pending']='unlock';x['runtime_error']='WS/XHTTP restore incomplete'
+ x['runtime_pending']='unlock';x['runtime_error']='Configured inbound restore incomplete'
  save(STATE,st)
- print('Unlock incomplete. State retained; monitor will retry WS + XHTTP.')
+ print('Unlock incomplete. State retained; monitor will retry configured inbounds.')
  return 1
 
 def clear_ip_state(x):
@@ -249,7 +270,7 @@ def main():
     x.update(locked=False,reason='',locked_at=0,unlock_at=0)
     x.pop('runtime_pending',None);x.pop('runtime_error',None)
     clear_ip_state(x)
-    log('AUTO-UNLOCK '+u+' verified=WS+XHTTP xray_restart=NO')
+    log('AUTO-UNLOCK '+u+' verified=configured-inbounds xray_restart=NO')
    else:x['runtime_error']='WS/XHTTP unlock incomplete'
   elif x.get('locked'):
    # Enforce locked accounts again after an external Xray restart.
