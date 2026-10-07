@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# JsPhantom Account Control V1.3.5 - verified native runtime API
+# JsPhantom Account Control V1.3.6 - verified native runtime API
 import re,json,time,subprocess,copy,tempfile,os,sys,fcntl
 from pathlib import Path
 CFG=Path('/usr/local/etc/xray/config.json'); ACCESS=Path('/var/log/xray/access.log'); BASE=Path('/etc/jsphantom/account-control'); POL=BASE/'policies'; STATE=BASE/'state.json'; SETTINGS=BASE/'settings.json'; LOG=Path('/var/log/jsphantom-account-control.log'); XRAY='/usr/local/bin/xray'; API='127.0.0.1:10000'; TAGS=['vless-ws','vless-xhttp']
@@ -101,6 +101,8 @@ def clear_ip_state(x):
  x['ip_violation_checks']=0
  x['ip_seen']={};x['ips']=[];x['ip_count']=0
  x['ip_activity']={};x['ip_first_seen']={}
+ x.pop('ip_overlap',None);x.pop('ip_overlap_since',None)
+ x['ip_observation_version']=2;x['ip_previous_check']=0
 
 def stats():
  try:s=subprocess.check_output([XRAY,'api','statsquery','--server='+API,''],stderr=subprocess.DEVNULL,text=True,timeout=12)
@@ -180,31 +182,47 @@ def main():
    c=cur.get(u,0);oldc=int(x.get('last_counter',0));d=c-oldc if c>=oldc else c
    if d>0:x['used_bytes']=int(x.get('used_bytes',0))+d
    x['last_counter']=c
-  # False-lock protection: an IP is counted only after it has enough
-  # access hits AND has survived the new-IP grace period. Rotating telco
-  # gateway IPs that flash briefly in the log therefore do not count.
+  # Access logs record accepted requests, not device/session lifetimes.
+  # Require renewed activity since the previous poll, then retain only a
+  # stable overlapping cohort through rotation grace and confirmation.
+  if x.get('ip_observation_version')!=2:
+   clear_ip_state(x)
+  previous=int(x.get('ip_previous_check',0))
+  interval=max(10,int(cfg.get('check_interval_seconds',60)))
+  contiguous=bool(previous and 0<now-previous<=max(window,interval*2))
   first_seen=x.setdefault('ip_first_seen',{})
   activity=seen.get(u,{})
   for a,z in activity.items():
    if a not in first_seen:first_seen[a]=int(z.get('first',now))
-  first_seen={a:int(t) for a,t in first_seen.items() if a in activity or now-int(t)<=window}
+  first_seen={a:int(t) for a,t in first_seen.items() if a in activity}
   x['ip_first_seen']=first_seen
-  qualified={}
-  details={}
+  qualified={};details={}
   for a,z in activity.items():
    hits=int(z.get('hits',0));last=int(z.get('last',0));first=int(first_seen.get(a,z.get('first',now)))
    age=max(0,now-first);last_age=max(0,now-last)
-   ok=(hits>=min_hits and age>=grace)
-   details[a]={'hits':hits,'age':age,'last_age':last_age,'qualified':ok}
+   fresh=bool(contiguous and previous<last<=now)
+   ok=(fresh and hits>=min_hits and age>=grace)
+   details[a]={'hits':hits,'age':age,'last_age':last_age,'fresh':fresh,'qualified':ok}
    if ok:qualified[a]=last
   x['ip_seen']=qualified;x['ip_count']=len(qualified);x['ips']=sorted(qualified);x['ip_activity']=details;x['last_check']=now
+  x['ip_previous_check']=now
   q=int(p.get('quota_bytes',0));lim=int(p.get('ip_limit',0))
   quota_hit=bool(q and x['used_bytes']>=q)
-  ip_hit=bool(lim and x['ip_count']>lim)
+  rotation_grace=max(0,int(cfg.get('ip_rotation_grace_seconds',180)))
+  ip_hit=bool(lim>0 and len(qualified)>lim)
   if ip_hit:
-   x['ip_violation_checks']=int(x.get('ip_violation_checks',0))+1
-   log('IP-CHECK '+u+': qualified='+','.join(x.get('ips',[]))+' count='+str(x['ip_count'])+'/'+str(lim)+' confirm='+str(x['ip_violation_checks'])+'/'+str(confirm))
-  else:x['ip_violation_checks']=0
+   overlap=set(x.get('ip_overlap',[])) & set(qualified)
+   if len(overlap)<=lim:
+    overlap=set(qualified)
+    x['ip_overlap_since']=now;x['ip_violation_checks']=0
+   x['ip_overlap']=sorted(overlap)
+   elapsed=max(0,now-int(x.get('ip_overlap_since',now)))
+   if elapsed>=rotation_grace:
+    x['ip_violation_checks']=int(x.get('ip_violation_checks',0))+1
+   log('IP-CHECK '+u+': qualified='+','.join(x['ips'])+' count='+str(x['ip_count'])+'/'+str(lim)+' overlap='+','.join(x['ip_overlap'])+' grace='+str(elapsed)+'/'+str(rotation_grace)+' confirm='+str(x['ip_violation_checks'])+'/'+str(confirm))
+  else:
+   x['ip_violation_checks']=0
+   x.pop('ip_overlap',None);x.pop('ip_overlap_since',None)
   confirmed_ip=ip_hit and x['ip_violation_checks']>=confirm
   reason='QUOTA_EXCEEDED' if quota_hit else ('IP_LIMIT' if confirmed_ip else '')
   pending=x.get('runtime_pending')
