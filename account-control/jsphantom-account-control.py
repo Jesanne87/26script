@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# JsPhantom Account Control V1.3.8 - verified native runtime API
+# JsPhantom Account Control V1.3.8 SAFE - verified native runtime API
 import re,json,time,subprocess,copy,tempfile,os,sys,fcntl
 from pathlib import Path
 CFG=Path('/usr/local/etc/xray/config.json'); ACCESS=Path('/var/log/xray/access.log'); BASE=Path('/etc/jsphantom/account-control'); POL=BASE/'policies'; STATE=BASE/'state.json'; SETTINGS=BASE/'settings.json'; LOG=Path('/var/log/jsphantom-account-control.log'); XRAY='/usr/local/bin/xray'; API='127.0.0.1:10000'; TAGS=['vless-ws','vless-xhttp']
@@ -105,8 +105,9 @@ def unlock_account(u):
  q=int(p.get('quota_bytes',0))
  if q and int(x.get('used_bytes',0))>=q:
   print('Quota still exceeded. Reset or increase quota first.');return 1
- if not uuid(u):
-  print('Account no longer exists in config; unlock cancelled.');return 1
+ eligible,why=eligible_for_restore(u,p,x)
+ if not eligible:
+  print('Unlock cancelled: '+why);return 1
  if restore_user(u):
   x.update(locked=False,reason='',locked_at=0,unlock_at=0)
   x.pop('runtime_pending',None);x.pop('runtime_error',None)
@@ -119,6 +120,26 @@ def unlock_account(u):
  save(STATE,st)
  print('Unlock incomplete. State retained; monitor will retry configured inbounds.')
  return 1
+
+def account_expiry(u):
+ # JsPhantom marker: #= username YYYY-MM-DD HH:MM:SS (server local time).
+ # Fail closed if expiry metadata is missing or malformed.
+ try:
+  from datetime import datetime
+  matches=[]
+  for line in CFG.read_text(errors='ignore').splitlines():
+   m=re.match(r'^#=\s+'+re.escape(u)+r'\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})(?:\s|$)',line)
+   if m:matches.append(datetime.strptime(m.group(1)+' '+m.group(2),'%Y-%m-%d %H:%M:%S').timestamp())
+  return min(matches) if matches else None
+ except (OSError,ValueError):return None
+
+def eligible_for_restore(u,p,x):
+ expiry=account_expiry(u)
+ if expiry is None or time.time()>=expiry:return False,'EXPIRED_OR_UNKNOWN_EXPIRY'
+ if not uuid(u):return False,'MISSING_CONFIG_USER'
+ quota=int(p.get('quota_bytes',0))
+ if quota and int(x.get('used_bytes',0))>=quota:return False,'QUOTA_EXCEEDED'
+ return True,''
 
 def admin_action(action,u):
  if not re.fullmatch(r'[A-Za-z0-9_.-]{1,80}',u):
@@ -140,6 +161,8 @@ def admin_action(action,u):
   print('IP limit '+('ON' if enabled else 'OFF')+' for '+u+'; quota/expiry unchanged.')
   return 0
  if action=='manual-block':
+  if not x.get('manual_block'):
+   x['pre_manual_reason']=x.get('reason','') if x.get('locked') else ''
   x['manual_block']=True
   x['reason']='MANUAL_BLOCK'
   x['runtime_pending']='lock'
@@ -156,12 +179,19 @@ def admin_action(action,u):
  if action=='manual-unblock':
   if not x.get('manual_block'):
    print('Manual block not active.');return 0
+  eligible,why=eligible_for_restore(u,p,x)
   x['manual_block']=False
-  q=int(p.get('quota_bytes',0))
-  if q and int(x.get('used_bytes',0))>=q:
-   x.update(locked=True,reason='QUOTA_EXCEEDED',unlock_at=0,runtime_pending='lock')
+  if not eligible:
+   x.update(locked=True,reason=why,unlock_at=0,runtime_pending='lock')
    save(STATE,st)
-   print('Manual block cleared, but quota exceeded: account stays locked.');return 0
+   print('Manual block cleared; user stays locked: '+why);return 0
+  # Preserve other existing lock causes; admin can use normal unlock separately.
+  previous=x.get('pre_manual_reason','')
+  x.pop('pre_manual_reason',None)
+  if previous and previous!='MANUAL_BLOCK':
+   x.update(locked=True,reason=previous,unlock_at=0,runtime_pending='lock')
+   save(STATE,st)
+   print('Manual block cleared; previous lock retained: '+previous);return 0
   x.update(runtime_pending='unlock',reason='MANUAL_BLOCK')
   save(STATE,st)
   if restore_user(u):
@@ -326,8 +356,14 @@ def main():
    else:
     x['runtime_error']='WS/XHTTP lock incomplete'
   elif want_unlock and not quota_hit:
+   eligible,why=eligible_for_restore(u,p,x)
+   if not eligible:
+    x.update(locked=True,reason=why,unlock_at=0,runtime_pending='lock')
+    if set_runtime(u,False):x.pop('runtime_pending',None);x.pop('runtime_error',None)
+    else:x['runtime_error']='Cannot enforce expired/quota lock'
+    continue
    x['runtime_pending']='unlock'
-   if uuid(u) and restore_user(u):
+   if restore_user(u):
     x.update(locked=False,reason='',locked_at=0,unlock_at=0)
     x.pop('runtime_pending',None);x.pop('runtime_error',None)
     clear_ip_state(x)
