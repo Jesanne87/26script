@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# JsPhantom Account Control V1.3.7 - verified native runtime API
+# JsPhantom Account Control V1.3.8 - verified native runtime API
 import re,json,time,subprocess,copy,tempfile,os,sys,fcntl
 from pathlib import Path
 CFG=Path('/usr/local/etc/xray/config.json'); ACCESS=Path('/var/log/xray/access.log'); BASE=Path('/etc/jsphantom/account-control'); POL=BASE/'policies'; STATE=BASE/'state.json'; SETTINGS=BASE/'settings.json'; LOG=Path('/var/log/jsphantom-account-control.log'); XRAY='/usr/local/bin/xray'; API='127.0.0.1:10000'; TAGS=['vless-ws','vless-xhttp']
@@ -97,6 +97,8 @@ def restore_user(u,uid=None):
 def unlock_account(u):
  st=load(STATE,{})
  x=st.get(u)
+ if x and x.get('manual_block'):
+  print('Manual block is active. Use --manual-unblock first.');return 1
  if not x or (not x.get('locked') and not x.get('runtime_pending')):
   print('User is not locked.');return 0
  p=load(POL/(u+'.json'),{})
@@ -116,6 +118,62 @@ def unlock_account(u):
  x['runtime_pending']='unlock';x['runtime_error']='Configured inbound restore incomplete'
  save(STATE,st)
  print('Unlock incomplete. State retained; monitor will retry configured inbounds.')
+ return 1
+
+def admin_action(action,u):
+ if not re.fullmatch(r'[A-Za-z0-9_.-]{1,80}',u):
+  print('Invalid username.');return 1
+ pf=POL/(u+'.json')
+ if not pf.is_file() or not uuid(u):
+  print('User policy or VLESS config missing.');return 1
+ p=load(pf,{})
+ if p.get('protocol')!='vless':return 1
+ st=load(STATE,{})
+ x=st.setdefault(u,{})
+ if action=='ip-off' or action=='ip-on':
+  enabled=(action=='ip-on')
+  p['ip_limit_enabled']=enabled
+  save(pf,p)
+  clear_ip_state(x)
+  save(STATE,st)
+  log('ADMIN-IP-LIMIT '+u+' enabled='+str(enabled)+' no_xray_restart')
+  print('IP limit '+('ON' if enabled else 'OFF')+' for '+u+'; quota/expiry unchanged.')
+  return 0
+ if action=='manual-block':
+  x['manual_block']=True
+  x['reason']='MANUAL_BLOCK'
+  x['runtime_pending']='lock'
+  save(STATE,st) # Persist intent before touching runtime
+  if set_runtime(u,False):
+   x.update(locked=True,reason='MANUAL_BLOCK',locked_at=int(time.time()),unlock_at=0)
+   x.pop('runtime_pending',None);x.pop('runtime_error',None)
+   save(STATE,st)
+   log('ADMIN-MANUAL-BLOCK '+u+' verified no_xray_restart')
+   print('Manual block applied: '+u);return 0
+  x['runtime_error']='Manual block runtime removal incomplete'
+  save(STATE,st)
+  print('Block pending; monitor will retry.');return 1
+ if action=='manual-unblock':
+  if not x.get('manual_block'):
+   print('Manual block not active.');return 0
+  x['manual_block']=False
+  q=int(p.get('quota_bytes',0))
+  if q and int(x.get('used_bytes',0))>=q:
+   x.update(locked=True,reason='QUOTA_EXCEEDED',unlock_at=0,runtime_pending='lock')
+   save(STATE,st)
+   print('Manual block cleared, but quota exceeded: account stays locked.');return 0
+  x.update(runtime_pending='unlock',reason='MANUAL_BLOCK')
+  save(STATE,st)
+  if restore_user(u):
+   x.update(locked=False,reason='',locked_at=0,unlock_at=0)
+   x.pop('runtime_pending',None);x.pop('runtime_error',None)
+   clear_ip_state(x);save(STATE,st)
+   log('ADMIN-MANUAL-UNBLOCK '+u+' verified no_xray_restart')
+   print('Manual block removed; account restored: '+u);return 0
+  x['runtime_error']='Manual unblock runtime restore incomplete';save(STATE,st)
+  print('Manual unblock pending; monitor will retry.');return 1
+ if action=='metrics':
+  print(json.dumps({'user':u,'ip_limit':p.get('ip_limit',0),'ip_limit_enabled':p.get('ip_limit_enabled',True),'ip_count':x.get('ip_count',0),'ip_activity':x.get('ip_activity',{}),'ips':x.get('ips',[]),'last_check':x.get('last_check',0),'used_bytes':x.get('used_bytes',0),'quota_bytes':p.get('quota_bytes',0),'locked':x.get('locked',False),'manual_block':x.get('manual_block',False),'reason':x.get('reason',''),'runtime_pending':x.get('runtime_pending'),'runtime_error':x.get('runtime_error')},indent=2));return 0
  return 1
 
 def clear_ip_state(x):
@@ -230,7 +288,7 @@ def main():
   q=int(p.get('quota_bytes',0));lim=int(p.get('ip_limit',0))
   quota_hit=bool(q and x['used_bytes']>=q)
   rotation_grace=max(0,int(cfg.get('ip_rotation_grace_seconds',180)))
-  ip_hit=bool(lim>0 and len(qualified)>lim)
+  ip_hit=bool(p.get('ip_limit_enabled',True) and lim>0 and len(qualified)>lim)
   if ip_hit:
    overlap=set(x.get('ip_overlap',[])) & set(qualified)
    if len(overlap)<=lim:
@@ -245,16 +303,19 @@ def main():
    x['ip_violation_checks']=0
    x.pop('ip_overlap',None);x.pop('ip_overlap_since',None)
   confirmed_ip=ip_hit and x['ip_violation_checks']>=confirm
-  reason='QUOTA_EXCEEDED' if quota_hit else ('IP_LIMIT' if confirmed_ip else '')
+  reason='MANUAL_BLOCK' if x.get('manual_block') else ('QUOTA_EXCEEDED' if quota_hit else ('IP_LIMIT' if confirmed_ip else ''))
   pending=x.get('runtime_pending')
   # A lock intent survives a partial API failure. Never label it verified early.
   want_lock=(pending=='lock' or (p.get('auto_lock',True) and reason and not x.get('locked') and (pending!='unlock' or quota_hit)))
-  if x.get('locked') and quota_hit:
+  if x.get('manual_block'):
+   x['reason']='MANUAL_BLOCK';x['unlock_at']=0
+   if pending=='unlock':x['runtime_pending']='lock';pending='lock'
+  elif x.get('locked') and quota_hit:
    x['reason']='QUOTA_EXCEEDED';x['unlock_at']=0
    if pending=='unlock':x.pop('runtime_pending',None);pending=None
-  want_unlock=(pending=='unlock' or
+  want_unlock=(not x.get('manual_block') and (pending=='unlock' or
                (x.get('locked') and x.get('reason')=='IP_LIMIT' and
-                now>=int(x.get('unlock_at') or (int(x.get('locked_at',now))+lockdur))))
+                now>=int(x.get('unlock_at') or (int(x.get('locked_at',now))+lockdur)))))
   if want_lock:
    lock_reason=reason or x.get('reason') or 'IP_LIMIT'
    x.update(reason=lock_reason,runtime_pending='lock')
@@ -286,10 +347,12 @@ if __name__=='__main__':
    print('Another Account Control operation is running; retry shortly.')
    sys.exit(1 if len(sys.argv)>1 else 0)
   try:
-   if len(sys.argv)==3 and sys.argv[1]=='--unlock':
+   if len(sys.argv)==3 and sys.argv[1] in ('--manual-block','--manual-unblock','--ip-on','--ip-off','--metrics'):
+    sys.exit(admin_action(sys.argv[1][2:],sys.argv[2]))
+   elif len(sys.argv)==3 and sys.argv[1]=='--unlock':
     sys.exit(unlock_account(sys.argv[2]))
    elif len(sys.argv)>1:
-    print('Usage: jsphantom-account-control [--unlock USER]');sys.exit(1)
+    print('Usage: jsphantom-account-control [--unlock USER|--manual-block USER|--manual-unblock USER|--ip-on USER|--ip-off USER|--metrics USER]');sys.exit(1)
    else:main()
   except Exception as e:
    log('ERROR '+str(e));print('Account Control error: '+str(e));sys.exit(1)
