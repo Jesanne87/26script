@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# JsPhantom Account Control V1.3.8 SAFE - verified native runtime API
+# JsPhantom Account Control V1.3.9 SAFE - verified native runtime API + lock events
 import re,json,time,subprocess,copy,tempfile,os,sys,fcntl
 from pathlib import Path
 CFG=Path('/usr/local/etc/xray/config.json'); ACCESS=Path('/var/log/xray/access.log'); BASE=Path('/etc/jsphantom/account-control'); POL=BASE/'policies'; STATE=BASE/'state.json'; SETTINGS=BASE/'settings.json'; LOG=Path('/var/log/jsphantom-account-control.log'); XRAY='/usr/local/bin/xray'; API='127.0.0.1:10000'; TAGS=['vless-ws','vless-xhttp']
@@ -7,7 +7,55 @@ BASE.mkdir(parents=True,exist_ok=True); POL.mkdir(parents=True,exist_ok=True)
 def load(p,d):
  try:return json.loads(p.read_text())
  except:return d
+def sync_lock_events(previous,current):
+ # Shared history format with User Detail V2.4; serialize against its watcher.
+ histbase=Path('/etc/jsphantom/user-status')
+ if not histbase.is_dir():return
+ lockfile=histbase/'.lock-history.lock';out=histbase/'lock-history.json'
+ with lockfile.open('a+') as guard:
+  fcntl.flock(guard,fcntl.LOCK_EX)
+  history=load(out,{})
+  if not isinstance(history,dict):history={}
+  changed=False;now=int(time.time())
+  for u,x in current.items():
+   if not isinstance(x,dict) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,80}',u):continue
+   prior=previous.get(u,{}) if isinstance(previous.get(u),dict) else {}
+   was=bool(prior.get('locked'));islocked=bool(x.get('locked'))
+   h=history.get(u,{})
+   if not isinstance(h,dict):h={}
+   observed=h.get('observed_locked')
+   # Existing locked account on initial install is not counted as a new event.
+   if observed is None and was==islocked:
+    h['observed_locked']=islocked;history[u]=h;changed=True;continue
+   if not was and islocked:
+    if observed is not True:
+     at=int(x.get('locked_at') or now)
+     reason=str(x.get('reason') or 'Reason not recorded')[:200]
+     h['total_locked']=int(h.get('total_locked',0))+1
+     h['last_locked']=at
+     h.setdefault('events',[]).append({'event':'LOCKED','at':at,'reason':reason})
+     changed=True
+    h['observed_locked']=True
+   elif was and not islocked:
+    if observed is not False:
+     h['last_unlocked']=now
+     h.setdefault('events',[]).append({'event':'UNLOCKED','at':now,'reason':'Account unlocked'})
+     changed=True
+    h['observed_locked']=False
+   elif observed is None:h['observed_locked']=islocked;changed=True
+   h['events']=h.get('events',[])[-50:]
+   history[u]=h
+  if changed:
+   fd,tmp=tempfile.mkstemp(dir=str(histbase),prefix='.lock-history-')
+   try:
+    with os.fdopen(fd,'w') as f:json.dump(history,f,indent=2,ensure_ascii=False)
+    os.chmod(tmp,0o600);os.replace(tmp,out)
+   finally:Path(tmp).unlink(missing_ok=True)
+
 def save(p,o):
+ if p==STATE:
+  try:sync_lock_events(load(STATE,{}),o)
+  except Exception as e:log('HISTORY-WARNING '+str(e))
  fd,t=tempfile.mkstemp(dir=str(p.parent),prefix='.ac-state-')
  try:
   with os.fdopen(fd,'w') as f:json.dump(o,f,indent=2)
