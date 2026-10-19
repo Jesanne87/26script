@@ -1,148 +1,61 @@
-# 🚀 JsPhantom Xray VPN Script
+# 🚀 JsPhantom Xray VPN
 
-**All-in-One Xray VPN Management Script**
+**All-in-One VPN Management untuk Debian/Ubuntu VPS** — pemasangan, akaun VLESS/VMESS, pemantauan dan penyelenggaraan melalui menu terminal.
 
-Script pengurusan Xray untuk VPS yang direka supaya pemasangan, pengurusan akaun dan monitoring server lebih mudah melalui menu terminal.
+## ✨ Fungsi utama
 
----
+- **VPN:** VLESS WebSocket / XHTTP, VMESS WebSocket, TLS, Nginx dan pengurusan Xray.
+- **Account Control:** cipta/padam/lanjut akaun, expiry, had IP, kuota, lock/unlock dan pengurusan polisi.
+- **User Detail:** status akaun, penggunaan, amaran IP limit, sebab lock, Last Online dan panduan Android/iOS.
+- **Keselamatan:** MY Protection (mod MONITOR untuk pemasangan baharu), Lock History dan pemeriksaan konfigurasi.
+- **Pengurusan:** Central Admin (Master/Agent), Telegram, backup, DNS cache, WARP dan VPS optimization.
+- **Diagnostic & Update:** System Diagnostic V2.0 dan **Safe Update V2.1.1** (Standard / Critical / Dry-run / Backup).
 
-## ✨ Main Features
+## 🖥️ Sistem disokong
 
-### 👤 Account Management
-- Create / Delete / Extend VPN account
-- Support **VLESS & VMESS**
-- Auto generate UUID & configuration link
-- Username confirmation sebelum account dibuat
-- Account expiry management
-- Auto delete expired account
-- View active / registered accounts
+Debian **11 / 12 / 13** atau Ubuntu **20.04 / 22.04 / 24.04**. Gunakan VPS baharu untuk pemasangan penuh. Jalankan sebagai `root`.
 
-### 🛡️ Account Control
-- **IP / Multi-Login Limit**
-- **Traffic Quota (GB)**
-- Auto Lock apabila melebihi limit
-- Auto Unlock selepas tempoh lock
-- Manual Lock / Unlock
-- Reset Usage
-- Edit IP Limit
-- List account status
-- Policy management per user
-- Designed supaya lock/unlock user **tidak perlu restart keseluruhan Xray**
+## 🚀 Fresh VPS — pemasangan penuh
 
-### 📊 Monitoring & Diagnostic
-- Monitor user login & IP
-- Account usage monitoring
-- Xray status
-- Nginx status
-- Account Control status
-- System diagnostic
-- Detect configuration / service problems
-- Server resource monitoring
-
-### ⚡ Xray & Network
-- Xray Core management
-- VLESS WebSocket
-- VLESS XHTTP
-- VMESS WebSocket
-- Nginx reverse proxy
-- BBR & network optimization
-- DNS optimization / caching support
-- Cloudflare WARP routing support
-
-### 🧠 Smart Protection
-- Multi-login detection
-- ISP / IP detection support
-- Automatic account enforcement
-- Account Control timer/service
-- Avoid unnecessary Xray restart to reduce user disconnection
-
-### 🧹 Automatic Maintenance
-- Auto delete expired users
-- Automatic service checking
-- Log management
-- Scheduled maintenance support
-- Nginx memory protection / monitoring
-
-### 🤖 Telegram Integration
-- Telegram Bot configuration
-- Save newly created account information to Telegram
-- Easier account reference & recovery
-- Backup notification support
-
-### 💾 Backup & Restore
-- Server configuration backup
-- Restore VPN configuration
-- Telegram backup support
-- Easier VPS migration
-- Domain/configuration migration support
-
----
-
-## 🖥️ Supported OS
-
-Recommended:
-
-- Debian 11 / 12 / 13
-- Ubuntu Server
-
-> Fresh VPS installation is recommended.
-
----
-
-## 🔄 Update VPS
-
-### Debian
+> **Hanya untuk VPS baharu. Jangan jalankan installer penuh pada VPS yang sudah ada pengguna VPN.**
 
 ```bash
-apt update -y && apt upgrade -y && apt dist-upgrade -y && reboot
+apt-get update && apt-get install -y ca-certificates curl wget
+curl -fLsS https://raw.githubusercontent.com/Jesanne87/26script/main/xray.sh -o /root/xray.sh
+chmod +x /root/xray.sh
+/root/xray.sh
 ```
 
-### Ubuntu
+## 🔄 VPS sedia ada — migrasi Safe Update (tanpa reinstall VPN)
+
+> Upload dahulu `menu/menu.sh` dan semua fail dalam folder `safe-update/` versi baharu ke GitHub. Arahan di bawah hanya memasang/migrasi menu updater, **bukan** menaik taraf semua modul secara automatik.
 
 ```bash
-apt-get update && apt-get upgrade -y && apt dist-upgrade -y && update-grub && reboot
+curl -fLsS https://raw.githubusercontent.com/Jesanne87/26script/main/safe-update/jsphantom-safe-update-install.sh -o /root/jsphantom-safe-update-install.sh
+chmod +x /root/jsphantom-safe-update-install.sh
+/root/jsphantom-safe-update-install.sh --dry-run
 ```
 
----
-
-## 🔑 Enable Root Access
+Jika dry-run berjaya, jalankan:
 
 ```bash
-wget https://raw.githubusercontent.com/Jesanne87/Root-Access/main/rootpass.sh
-chmod +x rootpass.sh
-./rootpass.sh
+/root/jsphantom-safe-update-install.sh --migrate
+menu
 ```
 
----
+Pilih **15 — JsPhantom Safe Update** untuk semak dan kemas kini modul. Migration membuat backup menu/updater lama di `/root/jsphantom-safe-update-migration/`; ia tidak reinstall Xray/Nginx atau menukar mod MY Protection.
 
-## 🚀 Installation
-
-Login VPS sebagai **root**, kemudian jalankan:
+## 🩺 Diagnostic
 
 ```bash
-sysctl -w net.ipv6.conf.all.disable_ipv6=1 && sysctl -w net.ipv6.conf.default.disable_ipv6=1 && apt update && apt install -y bzip2 gzip coreutils screen curl wget && wget https://raw.githubusercontent.com/Jesanne87/26script/main/xray.sh && chmod +x xray.sh && sed -i -e 's/\r$//' xray.sh && ./xray.sh
+system-diagnostic
+system-diagnostic --report
 ```
 
----
-
-## ⭐ Highlight Latest Version
-
-**JsPhantom** kini bukan sekadar installer Xray.
-
-Ia merangkumi:
-
-**VPN Account Management + Account Control + Multi-Login Protection + Traffic Quota + Auto Expiry + Monitoring + Backup + Telegram + Network Optimization**
-
-Semuanya direka untuk diurus melalui menu terminal yang mudah.
-
----
+Diagnostic V2.0 menyemak komponen yang dipasang tanpa mengubah servis atau firewall. Modul pilihan yang tiada sepatutnya dipaparkan sebagai N/A, bukan dianggap rosak.
 
 ## 👨‍💻 Developer
 
-**JsPhantom**
+**JsPhantom** · GitHub: [Jesanne87](https://github.com/Jesanne87) · Repo: [26script](https://github.com/Jesanne87/26script)
 
-GitHub: **Jesanne87**
-
----
-
-> ⚠️ Gunakan script ini hanya pada server dan rangkaian yang anda mempunyai kebenaran untuk urus.
+> ⚠️ Gunakan hanya pada VPS dan rangkaian yang anda dibenarkan urus. Simpan backup sebelum sebarang kemas kini kritikal.
