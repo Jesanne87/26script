@@ -5,7 +5,7 @@ ROOT=pathlib.Path('/etc/jsphantom/warp-v2')
 STATE=ROOT/'settings.json'
 BACK=ROOT/'backups'
 CONFIG=pathlib.Path(os.environ.get('JSPHANTOM_XRAY_CONFIG','/usr/local/etc/xray/config.json'))
-DEFAULT={'mode':'off','domains':[],'inbounds':['vless-ws','vless-xhttp'],'port':40000}
+DEFAULT={'mode':'off','domains':[],'inbounds':['vless-ws','vless-xhttp','vless-httpupgrade'],'port':40000}
 START='# JSPHANTOM_WARP_V2_START'
 END='# JSPHANTOM_WARP_V2_END'
 
@@ -211,7 +211,7 @@ def check(d):
 
 def main():
     ap=argparse.ArgumentParser();sub=ap.add_subparsers(dest='cmd',required=True)
-    for x in ('status','install','off','selective','full','list','backups'):sub.add_parser(x)
+    for x in ('status','install','off','selective','full','list','backups','wireproxy-on','wireproxy-off'):sub.add_parser(x)
     a=sub.add_parser('add');a.add_argument('domain')
     a=sub.add_parser('delete');a.add_argument('domain')
     a=sub.add_parser('port');a.add_argument('number',type=int)
@@ -219,6 +219,30 @@ def main():
     a=sub.add_parser('inbounds');a.add_argument('tags',nargs='+')
     args=ap.parse_args();d=load()
     if args.cmd=='status':check(d);return
+    if args.cmd in ('wireproxy-on','wireproxy-off'):
+        if args.cmd=='wireproxy-on':
+            r=run(['systemctl','start','wireproxy'])
+            if r.returncode:raise RuntimeError('WireProxy start failed: '+r.stderr.strip())
+            if run(['systemctl','is-active','wireproxy']).stdout.strip()!='active':
+                raise RuntimeError('WireProxy service not active after start')
+            try:
+                with socket.create_connection(('127.0.0.1',d['port']),timeout=3):pass
+            except OSError as e:raise RuntimeError('WireProxy started but SOCKS port unreachable: '+str(e))
+            print('WireProxy ON (service started). WARP routing mode unchanged:',d['mode'])
+        else:
+            # Refuse to cut active WARP traffic. User must switch routing OFF first.
+            actual=[]
+            if CONFIG.exists():
+                cfg=json_obj(CONFIG.read_text())
+                actual=[r for r in cfg.get('routing',{}).get('rules',[]) if r.get('outboundTag')=='jsphantom-warp-v2']
+            if d['mode']!='off' or actual:
+                raise RuntimeError('WARP routing still enabled. Select WARP off (direct) first, then stop WireProxy.')
+            r=run(['systemctl','stop','wireproxy'])
+            if r.returncode:raise RuntimeError('WireProxy stop failed: '+r.stderr.strip())
+            if run(['systemctl','is-active','wireproxy']).stdout.strip()=='active':
+                raise RuntimeError('WireProxy still active')
+            print('WireProxy OFF (service stopped). Boot enablement unchanged.')
+        return
     if args.cmd=='list':print('\n'.join(d['domains']) or '(empty)');return
     if args.cmd=='backups':print('\n'.join(str(x) for x in sorted(BACK.iterdir(),reverse=True)[:15]) if BACK.exists() else '(none)');return
     if args.cmd=='rollback':rollback(args.path);return
@@ -241,7 +265,7 @@ def main():
         if not 1<=args.number<=65535:raise ValueError('Invalid port')
         d['port']=args.number
     elif args.cmd=='inbounds':
-        allowed={'vless-ws','vless-xhttp'}
+        allowed={'vless-ws','vless-xhttp','vless-httpupgrade'}
         if not set(args.tags)<=allowed:raise ValueError('Only supported VLESS tags: '+', '.join(sorted(allowed)))
         d['inbounds']=list(dict.fromkeys(args.tags))
     apply(d)
