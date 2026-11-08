@@ -2,7 +2,7 @@
 # JsPhantom Account Control V1.3.9 SAFE - verified native runtime API + lock events
 import re,json,time,subprocess,copy,tempfile,os,sys,fcntl
 from pathlib import Path
-CFG=Path('/usr/local/etc/xray/config.json'); ACCESS=Path('/var/log/xray/access.log'); BASE=Path('/etc/jsphantom/account-control'); POL=BASE/'policies'; STATE=BASE/'state.json'; SETTINGS=BASE/'settings.json'; LOG=Path('/var/log/jsphantom-account-control.log'); XRAY='/usr/local/bin/xray'; API='127.0.0.1:10000'; TAGS=['vless-ws','vless-xhttp']
+CFG=Path('/usr/local/etc/xray/config.json'); ACCESS=Path('/var/log/xray/access.log'); BASE=Path('/etc/jsphantom/account-control'); POL=BASE/'policies'; STATE=BASE/'state.json'; SETTINGS=BASE/'settings.json'; LOG=Path('/var/log/jsphantom-account-control.log'); XRAY='/usr/local/bin/xray'; API='127.0.0.1:10000'; TAGS=['vless-ws','vless-xhttp','vless-httpupgrade']
 BASE.mkdir(parents=True,exist_ok=True); POL.mkdir(parents=True,exist_ok=True)
 def load(p,d):
  try:return json.loads(p.read_text())
@@ -130,7 +130,7 @@ def configured_user_tags(u):
  return selected
 
 def set_runtime(u,add):
- try:tags=configured_user_tags(u) if add else TAGS
+ try:tags=configured_user_tags(u)
  except Exception as e:
   log('RESTORE-INCOMPLETE '+u+': '+str(e)+' xray_restart=NO')
   return False
