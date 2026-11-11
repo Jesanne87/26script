@@ -80,8 +80,6 @@ def transform(src,d):
     for raw,obj in items:
         if obj.get('outboundTag') == 'jsphantom-warp-v2':
             continue # Remove all previously managed WARP rules before rebuilding.
-        if obj.get('outboundTag') in ('WARP-socks5-v4','WARP-socks5-v6') and 'domain' in obj:
-            continue # Legacy domain rules are migrated during install.
         clean.append((raw,obj))
     # A full-mode catch-all must follow blocking and API rules, and precede normal routing.
     idx=0
@@ -128,12 +126,13 @@ def apply(d):
         except OSError as e:
             raise RuntimeError('WireProxy SOCKS port is unreachable: '+str(e))
     src=CONFIG.read_text();new=transform(src,d)
+    original_stat=CONFIG.stat()
     json_obj(new) # catch syntax errors, even if Xray permits comments
     if new==src:
         save(d);print('No Xray changes needed');return
     fd,tmp=tempfile.mkstemp(prefix='.jsphantom-warp-',suffix='.json',dir=str(CONFIG.parent));os.close(fd)
     try:
-        pathlib.Path(tmp).write_text(new);os.chmod(tmp,CONFIG.stat().st_mode & 0o777)
+        pathlib.Path(tmp).write_text(new);os.chown(tmp,original_stat.st_uid,original_stat.st_gid);os.chmod(tmp,original_stat.st_mode & 0o777)
         test(tmp)
         b=backup_file()
         try:
@@ -221,6 +220,8 @@ def main():
     if args.cmd=='status':check(d);return
     if args.cmd in ('wireproxy-on','wireproxy-off'):
         if args.cmd=='wireproxy-on':
+            if d['mode'] != 'off':
+                raise RuntimeError('State must be OFF before manually starting WireProxy')
             r=run(['systemctl','start','wireproxy'])
             if r.returncode:raise RuntimeError('WireProxy start failed: '+r.stderr.strip())
             if run(['systemctl','is-active','wireproxy']).stdout.strip()!='active':
@@ -228,7 +229,7 @@ def main():
             try:
                 with socket.create_connection(('127.0.0.1',d['port']),timeout=3):pass
             except OSError as e:raise RuntimeError('WireProxy started but SOCKS port unreachable: '+str(e))
-            print('WireProxy ON (service started). WARP routing mode unchanged:',d['mode'])
+            print('WireProxy ON for this session only (autostart remains disabled). Routing unchanged:',d['mode'])
         else:
             # Refuse to cut active WARP traffic. User must switch routing OFF first.
             actual=[]
@@ -247,6 +248,7 @@ def main():
     if args.cmd=='backups':print('\n'.join(str(x) for x in sorted(BACK.iterdir(),reverse=True)[:15]) if BACK.exists() else '(none)');return
     if args.cmd=='rollback':rollback(args.path);return
     if args.cmd=='install':
+        raise RuntimeError('Install must use install.sh management-only; no automatic Xray config changes')
         # Migrate legacy domain lists only on first install.
         if not STATE.exists() and CONFIG.exists():
             s=CONFIG.read_text();ra,rb=find_array(s,find_object(s,'routing'),'rules')
