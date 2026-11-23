@@ -334,9 +334,19 @@ def main():
  now=int(time.time())
  seen=scan_ips(ps,window,now)
  for u,p in ps.items():
-  x=st.setdefault(u,{'used_bytes':0,'last_counter':0,'locked':False,'reason':'','ip_seen':{},'ip_violation_checks':0})
+  pid=p.get('policy_id')
+  x=st.get(u)
+  if x is None or (pid and x.get('policy_id')!=pid):
+   # New account (or same username recreated): usage starts at 0 and the
+   # current Xray counter becomes the baseline, because rmu does not clear it.
+   x=st[u]={'used_bytes':0,'last_counter':0,'locked':False,'reason':'','ip_seen':{},'ip_violation_checks':0}
+   if cur is not None:x['last_counter']=cur.get(u,0)
+   else:x['baseline_pending']=True
+  if pid:x['policy_id']=pid
   if cur is not None:
-   c=cur.get(u,0);oldc=int(x.get('last_counter',0));d=c-oldc if c>=oldc else c
+   c=cur.get(u,0)
+   if x.pop('baseline_pending',False):x['last_counter']=c
+   oldc=int(x.get('last_counter',0));d=c-oldc if c>=oldc else c
    if d>0:x['used_bytes']=int(x.get('used_bytes',0))+d
    x['last_counter']=c
   # Access logs record accepted requests, not device/session lifetimes.
